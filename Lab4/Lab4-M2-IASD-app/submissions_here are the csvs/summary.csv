@@ -1,0 +1,7 @@
+id,model_name,learning_rate,epochs,batch_size,dropout_rate,image_size,pos_weight,best_val_auc
+resnet_lr3e4_weighted,ResNet,0.0003,20,32,0.3,224,0.338,1.0
+resnet_lr1e3_weighted,ResNet,0.001,15,32,0.3,224,0.338,1.0
+resnet_lr3e4_noweight,ResNet,0.0003,20,32,0.3,224,,1.0
+inception_lr3e4_weighted,Inception,0.0003,20,32,0.4,224,0.338,1.0
+inception_lr1e3_weighted,Inception,0.001,15,32,0.4,224,0.338,1.0
+unet_lr5e4_weighted,U-Net,0.0005,15,16,0.3,224,0.338,0.9375
