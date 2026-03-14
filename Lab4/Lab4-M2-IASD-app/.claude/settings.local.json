@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(file /Users/mohorozovic/M2/S4/DLIA/Lab4/Lab4-M2-IASD-app/data/train/PNEUMONIA/* | head -5)",
-      "Bash(file /Users/mohorozovic/M2/S4/DLIA/Lab4/Lab4-M2-IASD-app/data/train/NORMAL/* | head -3)",
-      "Bash(file /Users/mohorozovic/M2/S4/DLIA/Lab4/Lab4-M2-IASD-app/submission/test_for_students/* | head -10)"
-    ]
-  }
-}
