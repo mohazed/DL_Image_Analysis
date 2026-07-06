@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Can a model eat with its eyes? — Calorie estimation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0C1417; --ink2:#0F1B1F; --panel:#14232A; --panel2:#1A2E35;
+  --line:#233a42; --line2:#31505a;
+  --text:#EAF1F1; --muted:#879BA0; --faint:#5E757B;
+  --A:#37C7B4; --A-dim:rgba(55,199,180,.13); --A-line:rgba(55,199,180,.4);
+  --B:#EFB24C; --B-dim:rgba(239,178,76,.13); --B-line:rgba(239,178,76,.42);
+  --good:#5FE0C8; --warn:#E5735C; --warn-dim:rgba(229,115,92,.14);
+  --display:'Space Grotesk',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--ink); color:var(--text); font-family:var(--body);
+  overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+.viewport{
+  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(1100px 700px at 78% -8%, rgba(55,199,180,.06), transparent 60%),
+    radial-gradient(900px 620px at 12% 108%, rgba(239,178,76,.055), transparent 60%),
+    var(--ink);
+}
+.stage{
+  position:relative; width:1280px; height:720px; flex:none;
+  transform-origin:center center;
+}
+/* ---------- slides ---------- */
+.slide{
+  position:absolute; inset:0; padding:66px 78px 74px;
+  display:flex; flex-direction:column;
+  opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity .5s ease;
+}
+.slide.active{opacity:1; visibility:visible; pointer-events:auto}
+@media (prefers-reduced-motion:reduce){ .slide{transition:none} }
+
+.eyebrow{
+  font-family:var(--mono); font-size:13px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--muted); display:flex; align-items:center; gap:12px; margin-bottom:20px;
+}
+.eyebrow .tick{width:26px; height:1px; background:var(--line2)}
+.eyebrow b{color:var(--A); font-weight:500}
+.headline{
+  font-family:var(--display); font-weight:600; font-size:46px; line-height:1.04;
+  letter-spacing:-.015em; margin-bottom:8px;
+}
+.headline .em{color:var(--A)} .headline .emb{color:var(--B)}
+.lede{font-size:18px; color:var(--muted); max-width:60ch; line-height:1.5; margin-top:6px}
+.slide-body{flex:1; min-height:0; margin-top:26px; display:flex}
+
+/* reveal children of active slide */
+.slide.active .rv{animation:rv .55s cubic-bezier(.2,.7,.2,1) both}
+.slide.active .rv2{animation:rv .55s cubic-bezier(.2,.7,.2,1) .08s both}
+.slide.active .rv3{animation:rv .55s cubic-bezier(.2,.7,.2,1) .16s both}
+@keyframes rv{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
+@media (prefers-reduced-motion:reduce){ .rv,.rv2,.rv3{animation:none!important} }
+
+/* ---------- chrome ---------- */
+.chrome{position:absolute; left:78px; right:78px; bottom:30px; display:flex; align-items:center; gap:20px; font-family:var(--mono); font-size:12px; color:var(--faint)}
+.progress{flex:1; height:2px; background:var(--line); border-radius:2px; overflow:hidden}
+.progress .fill{height:100%; width:0; background:linear-gradient(90deg,var(--A),var(--good)); transition:width .5s ease}
+.counter{letter-spacing:.14em; color:var(--muted)}
+.section-tag{letter-spacing:.14em; text-transform:uppercase}
+.sig{position:absolute; left:78px; bottom:52px; display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:10.5px; color:var(--faint); letter-spacing:.1em}
+.sig .bar{width:120px; height:7px; border-radius:4px; overflow:hidden; display:flex; border:1px solid var(--line)}
+.sig .bar i{display:block; height:100%}
+.sig .a{width:76%; background:var(--A)} .sig .b{width:24%; background:var(--B)}
+.navbtn{position:absolute; bottom:26px; width:34px; height:34px; border-radius:50%; border:1px solid var(--line2);
+  background:var(--panel); color:var(--muted); cursor:pointer; font-size:15px; display:grid; place-items:center;
+  transition:.2s; z-index:20}
+.navbtn:hover{color:var(--text); border-color:var(--A); background:var(--panel2)}
+.navbtn:focus-visible{outline:2px solid var(--A); outline-offset:2px}
+#prev{right:126px} #next{right:82px}
+
+/* ---------- generic components ---------- */
+.tag{font-family:var(--mono); font-size:11px; letter-spacing:.08em; padding:3px 9px; border-radius:999px; display:inline-flex; align-items:center; gap:6px}
+.tag.A{color:var(--A); background:var(--A-dim); border:1px solid var(--A-line)}
+.tag.B{color:var(--B); background:var(--B-dim); border:1px solid var(--B-line)}
+.dot{width:8px;height:8px;border-radius:50%}
+.dot.A{background:var(--A)} .dot.B{background:var(--B)}
+.panel{background:linear-gradient(180deg,var(--panel),var(--ink2)); border:1px solid var(--line); border-radius:14px; padding:22px 24px}
+.panel h4{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:500; margin-bottom:14px}
+.two-col{display:grid; grid-template-columns:1fr 1fr; gap:26px; width:100%}
+.stat-num{font-family:var(--display); font-weight:600; letter-spacing:-.02em; line-height:1}
+.mono{font-family:var(--mono)}
+ul.clean{list-style:none; display:flex; flex-direction:column; gap:14px}
+ul.clean li{position:relative; padding-left:22px; font-size:16.5px; line-height:1.5; color:#D5E0E1}
+ul.clean li::before{content:""; position:absolute; left:0; top:9px; width:8px; height:8px; border-radius:2px; background:var(--A); transform:rotate(45deg)}
+ul.clean li b{color:var(--text); font-weight:600}
+ul.clean li .mut{color:var(--muted)}
+
+/* data table */
+table.cmp{width:100%; border-collapse:collapse; font-size:15px}
+table.cmp th,table.cmp td{text-align:left; padding:11px 10px; border-bottom:1px solid var(--line)}
+table.cmp thead th{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:500}
+table.cmp td.prop{color:var(--muted); font-family:var(--mono); font-size:12.5px; letter-spacing:.03em}
+table.cmp .cA{color:var(--A)} table.cmp .cB{color:var(--B)}
+table.cmp tbody tr:last-child td{border-bottom:none}
+
+/* map table (fact -> choice) */
+.maprow{display:grid; grid-template-columns:1fr 30px 1fr; align-items:center; gap:0; padding:12px 0; border-bottom:1px solid var(--line)}
+.maprow:last-child{border-bottom:none}
+.maprow .fact{font-size:15px; color:var(--muted)}
+.maprow .arr{color:var(--A); text-align:center; font-family:var(--mono)}
+.maprow .choice{font-size:15px; color:var(--text); font-weight:500}
+.maprow .choice b{color:var(--A)}
+
+/* charts */
+.hist{display:flex; align-items:flex-end; gap:2px; height:150px; padding-top:6px}
+.hist .col{flex:1; background:var(--barcol,var(--A)); border-radius:2px 2px 0 0; transform:scaleY(0); transform-origin:bottom; opacity:.9}
+.slide.active .hist .col{animation:grow .5s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(var(--i)*7ms)}
+@keyframes grow{to{transform:scaleY(1)}}
+@media (prefers-reduced-motion:reduce){ .hist .col{transform:scaleY(1); animation:none!important} }
+.axis{display:flex; justify-content:space-between; font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:7px}
+
+.bands{display:flex; align-items:flex-end; gap:12px; height:200px}
+.bandgrp{flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end}
+.bandbars{display:flex; align-items:flex-end; gap:4px; height:100%; width:100%; justify-content:center}
+.bandbars i{width:26%; border-radius:3px 3px 0 0; transform:scaleY(0); transform-origin:bottom}
+.bandbars i.a{background:var(--A)} .bandbars i.b{background:var(--B)}
+.slide.active .bandbars i{animation:grow .55s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(var(--i)*40ms)}
+.bandlbl{font-family:var(--mono); font-size:10.5px; color:var(--faint); margin-top:9px; white-space:nowrap}
+
+/* horizontal compare bars (results) */
+.hbar{display:flex; flex-direction:column; gap:9px}
+.hbar .row{display:grid; grid-template-columns:66px 1fr 62px; align-items:center; gap:12px}
+.hbar .rlab{font-family:var(--mono); font-size:12px; color:var(--muted); text-align:right}
+.hbar .track{height:20px; background:var(--ink2); border:1px solid var(--line); border-radius:6px; overflow:hidden}
+.hbar .fill{height:100%; transform:scaleX(0); transform-origin:left; border-radius:5px}
+.slide.active .hbar .fill{animation:growx .7s cubic-bezier(.2,.8,.2,1) forwards; animation-delay:calc(var(--i)*90ms)}
+@keyframes growx{to{transform:scaleX(1)}}
+@media (prefers-reduced-motion:reduce){ .bandbars i,.hbar .fill{transform:none;animation:none!important} }
+.hbar .val{font-family:var(--mono); font-size:13px; font-weight:500; text-align:left}
+
+/* pipeline diagram */
+.pipe{display:flex; align-items:center; justify-content:center; gap:0; flex-wrap:wrap; width:100%}
+.node{background:var(--panel); border:1px solid var(--line2); border-radius:11px; padding:14px 16px; text-align:center; min-width:96px}
+.node .nt{font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; color:var(--muted); text-transform:uppercase; margin-bottom:5px}
+.node .nb{font-size:14px; font-weight:600; font-family:var(--display)}
+.node.hero{border-color:var(--A-line); background:linear-gradient(180deg,var(--A-dim),var(--panel))}
+.arrow{color:var(--line2); font-size:20px; padding:0 10px; font-family:var(--mono)}
+.emb-note{margin-top:14px; text-align:center; font-family:var(--mono); font-size:12px; color:var(--muted)}
+.emb-note b{color:var(--B)}
+
+/* code chip */
+.code{font-family:var(--mono); font-size:15px; background:var(--ink2); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:#CFE9E4; letter-spacing:.01em}
+.code .k{color:var(--B)} .code .g{color:var(--A)} .code .c{color:var(--faint)}
+
+/* hero */
+.hero-wrap{flex:1; display:flex; flex-direction:column; justify-content:center}
+.hero-title{font-family:var(--display); font-weight:700; font-size:78px; line-height:.98; letter-spacing:-.03em}
+.hero-title .plate{color:var(--A)}
+.hero-sub{font-size:21px; color:var(--muted); margin-top:20px; max-width:44ch; line-height:1.45}
+.hero-metric{display:flex; align-items:center; gap:20px; margin-top:40px; font-family:var(--mono)}
+.hm{display:flex; flex-direction:column; gap:4px}
+.hm .l{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint)}
+.hm .v{font-family:var(--display); font-weight:600; font-size:34px}
+.hm .v.base{color:var(--muted)} .hm .v.win{color:var(--good)}
+.hm .u{font-size:12px; color:var(--faint)}
+.harrow{color:var(--line2); font-size:26px}
+.hero-foot{font-family:var(--mono); font-size:12.5px; color:var(--faint); letter-spacing:.06em; margin-top:auto; padding-top:26px}
+.hero-foot b{color:var(--muted); font-weight:500}
+
+/* plate schematic */
+.plates{display:flex; gap:34px; align-items:center; justify-content:center; width:100%}
+.plate-c{display:flex; flex-direction:column; align-items:center; gap:14px}
+.disc{width:150px; height:150px; border-radius:50%; display:grid; place-items:center; position:relative;
+  box-shadow:inset 0 0 0 2px var(--line2), 0 20px 40px rgba(0,0,0,.35)}
+.disc .food{border-radius:50%}
+.plate-kcal{font-family:var(--display); font-weight:600; font-size:26px}
+.plate-name{font-family:var(--mono); font-size:12px; color:var(--muted); letter-spacing:.05em}
+.vs{font-family:var(--mono); color:var(--faint); font-size:14px}
+
+/* callout */
+.callout{background:var(--B-dim); border:1px solid var(--B-line); border-radius:12px; padding:16px 20px; font-size:15.5px; line-height:1.5}
+.callout b{color:var(--B)}
+.callout.teal{background:var(--A-dim); border-color:var(--A-line)} .callout.teal b{color:var(--A)}
+.callout.warn{background:var(--warn-dim); border-color:rgba(229,115,92,.4)} .callout.warn b{color:var(--warn)}
+
+.big-nums{display:flex; align-items:stretch; gap:0; margin-bottom:22px}
+.bn{flex:1; padding:0 22px; border-right:1px solid var(--line)}
+.bn:first-child{padding-left:0} .bn:last-child{border-right:none; padding-right:0}
+.bn .l{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); margin-bottom:8px}
+.bn .v{font-family:var(--display); font-weight:600; font-size:40px; letter-spacing:-.02em; line-height:1}
+.bn .s{font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:6px}
+.bn .v.base{color:var(--muted)} .bn .v.cv{color:var(--A)} .bn .v.pub{color:var(--good)}
+
+.leak{display:grid; grid-template-columns:1fr 1fr; gap:26px; width:100%; align-items:center}
+.frameset{display:flex; gap:8px; flex-wrap:wrap; max-width:210px}
+.frm{width:44px; height:34px; border-radius:5px; border:1px solid var(--line2); position:relative; overflow:hidden}
+.frm::after{content:""; position:absolute; inset:0; background:repeating-linear-gradient(45deg,transparent,transparent 5px,rgba(55,199,180,.12) 5px,rgba(55,199,180,.12) 10px)}
+.frm .lb{position:absolute; bottom:2px; right:3px; font-family:var(--mono); font-size:8px; color:var(--A); z-index:2}
+.foldbox{border:1px dashed var(--line2); border-radius:10px; padding:12px 14px; min-height:70px}
+.foldbox .ft{font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:8px}
+
+.foot-note{font-family:var(--mono); font-size:12px; color:var(--faint); margin-top:14px}
+.k{color:var(--A)} .kb{color:var(--B)}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; width:100%}
+.takeaway{border-left:2px solid var(--A); padding:4px 0 4px 16px}
+.takeaway .n{font-family:var(--mono); font-size:11px; color:var(--A); letter-spacing:.1em; margin-bottom:7px}
+.takeaway p{font-size:15px; line-height:1.5; color:#D5E0E1}
+.takeaway p b{color:var(--text)}
+
+.hint{position:fixed; bottom:14px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:11px; color:var(--faint); opacity:.7; z-index:30}
+kbd{font-family:var(--mono); border:1px solid var(--line2); border-radius:4px; padding:1px 5px; font-size:10px; color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="viewport">
+  <div class="stage" id="stage">
+
+    <!-- 01 HERO -->
+    <section class="slide active" data-section="Overview">
+      <div class="hero-wrap">
+        <div class="eyebrow rv"><span class="tick"></span> Computer Vision · Regression · Mean Absolute Error</div>
+        <h1 class="hero-title rv">Can a model<br><span class="plate">eat with its eyes?</span></h1>
+        <p class="hero-sub rv2">Estimating the total calories of a dish from a single RGB photograph — a Kaggle challenge, and a study in letting the data dictate every decision.</p>
+        <div class="hero-metric rv3">
+          <div class="hm"><span class="l">Baseline · per-source median</span><span class="v base">214.6</span><span class="u">MAE (kcal)</span></div>
+          <span class="harrow">→</span>
+          <div class="hm"><span class="l">Submission · public</span><span class="v win">39.55</span><span class="u">MAE (kcal) · 5.4× lower</span></div>
+        </div>
+        <div class="hero-foot rv3"><b>Applied CV project defense</b> &nbsp;·&nbsp; 3,098 train / 547 test images &nbsp;·&nbsp; <span class="mono">Amine ROUIBI & Mohamed ZOUAD</span></div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 02 PROBLEM -->
+    <section class="slide" data-section="The problem">
+      <div class="eyebrow rv"><span class="tick"></span> <b>01</b> · The problem</div>
+      <h2 class="headline rv">Calories aren't in the pixels.</h2>
+      <div class="slide-body two-col" style="align-items:center">
+        <ul class="clean rv2">
+          <li>Single photo → one continuous <b>kcal</b> value. Regression, scored by <b>MAE</b> — which is minimised by the <span class="mut">conditional median</span>, not the mean.</li>
+          <li>Two dishes can share a silhouette yet differ by hundreds of kcal. The model must infer <b>ingredient density × portion</b>, not just "what food is this".</li>
+          <li>Test is <b>30% public / 70% private</b>. The public leaderboard is a decoy — <b>the honest signal is cross-validation</b>, and that framing drives the whole pipeline.</li>
+        </ul>
+        <div class="rv3 plates">
+          <div class="plate-c">
+            <div class="disc" style="background:radial-gradient(circle at 40% 35%,#25423e,#16292c)"><div class="food" style="width:96px;height:96px;background:radial-gradient(circle at 45% 40%,#4c8f5a,#2f6b3f)"></div></div>
+            <div class="plate-kcal" style="color:var(--A)">~150</div><div class="plate-name">leafy salad</div>
+          </div>
+          <div class="vs">same footprint</div>
+          <div class="plate-c">
+            <div class="disc" style="background:radial-gradient(circle at 40% 35%,#3a3324,#1c1a12)"><div class="food" style="width:96px;height:96px;background:radial-gradient(circle at 45% 40%,#e0a441,#9c6a1e)"></div></div>
+            <div class="plate-kcal" style="color:var(--B)">~750</div><div class="plate-name">creamy pasta</div>
+          </div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 03 TWO SOURCES -->
+    <section class="slide" data-section="The data">
+      <div class="eyebrow rv"><span class="tick"></span> <b>02</b> · The data — the dominant fact</div>
+      <h2 class="headline rv">One dataset, <span class="em">two</span> hidden cameras.</h2>
+      <p class="lede rv">The file extension deterministically identifies the source — a free, reliable signal the brief tried to hide. And it splits <span class="mono">76/24</span> identically in train and test.</p>
+      <div class="slide-body two-col rv2" style="gap:34px">
+        <table class="cmp">
+          <thead><tr><th></th><th class="cA">◆ Source A</th><th class="cB">◆ Source B</th></tr></thead>
+          <tbody>
+            <tr><td class="prop">file</td><td class="cA">.png</td><td class="cB">.jpg</td></tr>
+            <tr><td class="prop">viewpoint</td><td>top-down lab rig</td><td>oblique smartphone</td></tr>
+            <tr><td class="prop">resolution</td><td>640×480</td><td>12.2&nbsp;MP</td></tr>
+            <tr><td class="prop">share</td><td class="cA">76%</td><td class="cB">24%</td></tr>
+            <tr><td class="prop">median kcal</td><td class="cA">172</td><td class="cB">603</td></tr>
+          </tbody>
+        </table>
+        <div>
+          <h4 style="font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Calorie mass by band &nbsp;<span class="tag A" style="margin-left:6px">A</span> <span class="tag B">B</span></h4>
+          <div class="bands" id="bands"></div>
+        </div>
+      </div>
+      <div class="callout rv3" style="margin-top:8px">Source B is a quarter of the images but carries <b>almost all the high-calorie mass</b> — so B, not A, decides the final score.</div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 04 TARGET + BASELINE -->
+    <section class="slide" data-section="Target">
+      <div class="eyebrow rv"><span class="tick"></span> <b>03</b> · The target &amp; the bar</div>
+      <h2 class="headline rv">A heavy tail — and a bar to clear.</h2>
+      <div class="slide-body two-col rv2" style="align-items:stretch">
+        <div class="panel">
+          <h4>Distribution shift under log1p</h4>
+          <div style="display:flex;gap:8px;margin-bottom:6px"><span class="tag A">raw · skew 3.90</span></div>
+          <div class="hist" id="histRaw"></div>
+          <div class="axis"><span>0</span><span>kcal</span><span>3.8k</span></div>
+          <div style="display:flex;gap:8px;margin:14px 0 6px"><span class="tag" style="color:var(--good);background:var(--A-dim);border:1px solid var(--A-line)">log1p · skew 0.66</span></div>
+          <div class="hist" id="histLog" style="height:96px"></div>
+          <div class="foot-note">→ near-symmetric ⇒ the network predicts <span class="k">log1p(kcal)</span>.</div>
+        </div>
+        <div class="panel" style="display:flex;flex-direction:column">
+          <h4>Baselines — the bar every model must clear</h4>
+          <table class="cmp" style="font-size:15.5px">
+            <tbody>
+              <tr><td class="prop">global mean</td><td style="text-align:right;color:var(--muted)">297.8</td></tr>
+              <tr><td class="prop">global median</td><td style="text-align:right;color:var(--muted)">255.9</td></tr>
+              <tr><td class="prop">per-source mean</td><td style="text-align:right;color:var(--muted)">237.3</td></tr>
+              <tr><td class="prop" style="color:var(--text)"><b>per-source median</b></td><td style="text-align:right;color:var(--good);font-family:var(--mono);font-weight:500">214.6</td></tr>
+            </tbody>
+          </table>
+          <div class="callout teal" style="margin-top:auto"><b>214.6 MAE</b> is the real bar. A model must beat it <b>per source</b> — a blended win can hide a loss on B, the split that sets the private grade.</div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 05 LEAKAGE -->
+    <section class="slide" data-section="Validation risk">
+      <div class="eyebrow rv"><span class="tick"></span> <b>04</b> · The validation trap</div>
+      <h2 class="headline rv">95.7% of labels <span class="emb">repeat.</span></h2>
+      <p class="lede rv">Only 500 unique calorie values across 2,355 Source-A images; 207 across 743 in B. The overhead rig photographed the <b>same physical dish many times</b>.</p>
+      <div class="slide-body leak rv2">
+        <div>
+          <div class="mono" style="font-size:12px;color:var(--muted);letter-spacing:.1em;margin-bottom:12px">ONE DISH · MANY NEAR-DUPLICATE FRAMES · IDENTICAL LABEL</div>
+          <div class="frameset">
+            <div class="frm"><span class="lb">304</span></div><div class="frm"><span class="lb">304</span></div>
+            <div class="frm"><span class="lb">304</span></div><div class="frm"><span class="lb">304</span></div>
+            <div class="frm"><span class="lb">304</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;gap:14px;margin-bottom:14px">
+            <div class="foldbox" style="flex:1"><div class="ft">Train fold</div><div class="frameset"><div class="frm"><span class="lb">304</span></div><div class="frm"><span class="lb">304</span></div><div class="frm"><span class="lb">304</span></div></div></div>
+            <div class="foldbox" style="flex:1;border-color:var(--warn)"><div class="ft" style="color:var(--warn)">Val fold</div><div class="frameset"><div class="frm"><span class="lb">304</span></div><div class="frm"><span class="lb">304</span></div></div></div>
+          </div>
+          <div class="callout warn">Random K-fold puts near-duplicate frames on <b>both sides</b>. The model just recalls a neighbour's label — <b>CV looks great and lies</b>, and model selection breaks.</div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 06 GROUP CV -->
+    <section class="slide" data-section="The fix">
+      <div class="eyebrow rv"><span class="tick"></span> <b>05</b> · The fix that makes every later number trustworthy</div>
+      <h2 class="headline rv">Group-aware, source-stratified CV.</h2>
+      <div class="slide-body two-col rv2" style="align-items:center">
+        <ul class="clean">
+          <li><b>Build groups per source</b> — perceptual-hash near-duplicates <span class="mut">(Hamming ≤ 4)</span> unioned with <b>exact-calorie clusters</b>, via union-find.</li>
+          <li><b>StratifiedGroupKFold</b> on <span class="mono">source × calorie-quintile</span> — no group ever crosses a fold; every fold sees both sources across the full range.</li>
+          <li>Splits <b>frozen to disk</b> so every experiment is comparable.</li>
+        </ul>
+        <div class="panel">
+          <h4>Group-overlap between train &amp; val</h4>
+          <div class="hbar">
+            <div class="row" style="--i:0"><span class="rlab">random</span><div class="track"><div class="fill" style="background:var(--warn);width:88%"></div></div><span class="val" style="color:var(--warn)">high</span></div>
+            <div class="row" style="--i:1"><span class="rlab">grouped</span><div class="track"><div class="fill" style="background:var(--A);width:1%"></div></div><span class="val" style="color:var(--A)">≈ 0%</span></div>
+          </div>
+          <div class="callout teal" style="margin-top:18px">Grouped CV is the <b>decision signal</b> — not the leaderboard. Everything downstream is chosen against it.</div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 07 DESIGN PHILOSOPHY -->
+    <section class="slide" data-section="Method">
+      <div class="eyebrow rv"><span class="tick"></span> <b>06</b> · The through-line</div>
+      <h2 class="headline rv">Every choice traces to a number.</h2>
+      <p class="lede rv">Nothing here is a default. Each EDA fact forces a specific design decision — the rest of the talk is just walking down this table.</p>
+      <div class="slide-body rv2" style="flex-direction:column;justify-content:center">
+        <div style="width:100%">
+          <div class="maprow"><span class="fact">Source is known at test time (extension → A/B)</span><span class="arr">→</span><span class="choice"><b>Source embedding</b> + per-source calibration &amp; clipping</span></div>
+          <div class="maprow"><span class="fact">Source B carries the calorie mass &amp; the error</span><span class="arr">→</span><span class="choice">Loss computed in <b>kcal space</b> (up-weights B)</span></div>
+          <div class="maprow"><span class="fact">Target right-skewed, skew 3.90</span><span class="arr">→</span><span class="choice">Predict in <b>log1p</b> space</span></div>
+          <div class="maprow"><span class="fact">Food fills little of the frame</span><span class="arr">→</span><span class="choice"><b>Letterbox</b> resize — never crop</span></div>
+          <div class="maprow"><span class="fact">Apparent portion IS the signal</span><span class="arr">→</span><span class="choice">Ban mixup / cutmix / random-resized-crop</span></div>
+          <div class="maprow"><span class="fact">95.7% duplicate labels</span><span class="arr">→</span><span class="choice"><b>Group-aware</b> cross-validation</span></div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 08 PREPROCESS -->
+    <section class="slide" data-section="Input">
+      <div class="eyebrow rv"><span class="tick"></span> <b>07</b> · Input pipeline</div>
+      <h2 class="headline rv">Letterbox, don't crop.</h2>
+      <div class="slide-body two-col rv2" style="align-items:center">
+        <ul class="clean">
+          <li><b>Aspect-preserving resize</b> to 384² + pad, for both sources. A crop cuts off food on a big plate; a squash distorts apparent portion — the exact thing we're measuring.</li>
+          <li><b>EXIF-transpose</b> fixes Source-B phone rotation (portrait &amp; landscape raws) before anything else.</li>
+          <li>Decode <b>once</b> → stacked <span class="mono">.npy</span> cache → copied to local SSD. B's 12 MP JPEGs are far too expensive to re-decode every epoch.</li>
+        </ul>
+        <div class="panel">
+          <h4>Letterbox vs the alternatives</h4>
+          <div style="display:flex;gap:18px;justify-content:center;align-items:center;padding:10px 0">
+            <div style="text-align:center"><div style="width:118px;height:88px;border:1px solid var(--A-line);border-radius:8px;background:var(--A-dim);display:grid;place-items:center;position:relative"><div style="width:52px;height:52px;border-radius:50%;background:var(--A);opacity:.7"></div><div style="position:absolute;top:0;bottom:0;left:0;width:26px;background:rgba(0,0,0,.35)"></div><div style="position:absolute;top:0;bottom:0;right:0;width:26px;background:rgba(0,0,0,.35)"></div></div><div class="mono" style="font-size:11px;color:var(--A);margin-top:8px">letterbox ✓</div></div>
+            <div style="text-align:center;opacity:.5"><div style="width:88px;height:88px;border:1px dashed var(--warn);border-radius:8px;display:grid;place-items:center"><div style="width:76px;height:52px;border-radius:50%;background:var(--warn)"></div></div><div class="mono" style="font-size:11px;color:var(--warn);margin-top:8px">crop / squash ✗</div></div>
+          </div>
+          <div class="foot-note">Portion geometry preserved → the density cue survives.</div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 09 AUGMENTATION -->
+    <section class="slide" data-section="Augmentation">
+      <div class="eyebrow rv"><span class="tick"></span> <b>08</b> · Augmentation</div>
+      <h2 class="headline rv">Augment the view — never the portion.</h2>
+      <p class="lede rv">If an augmentation changes how much food <i>appears</i> to be on the plate, it corrupts the label. So the transforms are source-specific and deliberately conservative.</p>
+      <div class="slide-body two-col rv2" style="align-items:center;gap:34px">
+        <table class="cmp">
+          <thead><tr><th></th><th class="cA">A · top-down</th><th class="cB">B · oblique</th></tr></thead>
+          <tbody>
+            <tr><td class="prop">h-flip</td><td class="cA">✓</td><td class="cB">✓</td></tr>
+            <tr><td class="prop">v-flip</td><td class="cA">✓</td><td style="color:var(--faint)">—</td></tr>
+            <tr><td class="prop">rotation</td><td class="cA">90/180/270°</td><td class="cB">±10° tilt</td></tr>
+            <tr><td class="prop">colour jitter</td><td class="cA">mild</td><td class="cB">mild</td></tr>
+            <tr><td class="prop">scale jitter</td><td class="cA">0.9–1.1×</td><td class="cB">0.9–1.1×</td></tr>
+          </tbody>
+        </table>
+        <div>
+          <div class="callout teal" style="margin-bottom:14px">Top-down view has <b>no "up"</b> → full 90° rotations are free, label-preserving augmentation. Oblique photos have gravity &amp; perspective → only a small tilt.</div>
+          <div class="callout warn"><b>Forbidden:</b> RandomResizedCrop, mixup, cutmix, heavy cutout — each crops away, blends, or occludes portion.</div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 10 MODEL -->
+    <section class="slide" data-section="Model">
+      <div class="eyebrow rv"><span class="tick"></span> <b>09</b> · Architecture</div>
+      <h2 class="headline rv">Shared backbone, source-aware head.</h2>
+      <p class="lede rv">One backbone so A's abundant data teaches food texture that transfers to B; the source embedding gives the head a cheap lever to shift output across the 3.5× median gap.</p>
+      <div class="slide-body rv2" style="flex-direction:column;justify-content:center">
+        <div class="pipe">
+          <div class="node"><div class="nt">input</div><div class="nb">384² photo</div></div>
+          <span class="arrow">→</span>
+          <div class="node hero"><div class="nt">shared · ImageNet</div><div class="nb">ConvNeXt-Tiny</div></div>
+          <span class="arrow">→</span>
+          <div class="node"><div class="nt">pool</div><div class="nb">GAP feature</div></div>
+          <span class="arrow">⊕</span>
+          <div class="node" style="border-color:var(--B-line);background:linear-gradient(180deg,var(--B-dim),var(--panel))"><div class="nt" style="color:var(--B)">source ⟨A|B⟩</div><div class="nb">embedding·16</div></div>
+          <span class="arrow">→</span>
+          <div class="node"><div class="nt">head</div><div class="nb">MLP</div></div>
+          <span class="arrow">→</span>
+          <div class="node hero"><div class="nt">output</div><div class="nb">log1p(kcal)</div></div>
+        </div>
+        <div class="emb-note">~28M params · pretrained weights bundled <b style="color:var(--A)">offline</b> (no live download on re-run) · differential LR: head 1e-3, backbone 1e-4</div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 11 LOSS -->
+    <section class="slide" data-section="Loss">
+      <div class="eyebrow rv"><span class="tick"></span> <b>10</b> · The loss — the sharpest decision</div>
+      <h2 class="headline rv">Predict in log space, <span class="em">penalise in kcal space.</span></h2>
+      <div class="slide-body two-col rv2" style="align-items:center">
+        <div>
+          <div class="code" style="margin-bottom:18px">loss = |<span class="g">expm1</span>(z) − y_kcal|<br><span class="c"># z ≈ log1p(kcal) from the net</span></div>
+          <ul class="clean">
+            <li>The net outputs <span class="k">log1p(kcal)</span> to tame the skew — but the loss <b>inverts the transform before comparing</b>.</li>
+            <li>So gradients scale with predicted kcal → Source B's large errors are <b>automatically up-weighted</b>, matching what MAE rewards.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>Why not plain L1 on log1p?</h4>
+          <div class="callout warn" style="margin-bottom:14px">Log-space L1 treats a <b>proportional</b> error equally — a 30-kcal miss on a salad = a 900-kcal miss on a feast. That <b>down-weights B</b>, exactly backwards.</div>
+          <div class="foot-note" style="margin-top:0">Huber(δ≈100 kcal) kept as a stability fallback · gradient-norm clip at 1.0.</div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 12 TRAINING / REPRO -->
+    <section class="slide" data-section="Training">
+      <div class="eyebrow rv"><span class="tick"></span> <b>11</b> · Training &amp; reproducibility</div>
+      <h2 class="headline rv">One config, two GPUs, bit-for-bit re-runs.</h2>
+      <div class="slide-body two-col rv2" style="align-items:stretch">
+        <div class="panel">
+          <h4>Runs anywhere, same trajectory</h4>
+          <ul class="clean" style="gap:12px">
+            <li><b>GPU-adaptive micro-batch + gradient accumulation</b> → effective batch fixed at 32. An A100 and a T4 follow the <i>same</i> optimisation path.</li>
+            <li><b>bf16</b> on A100 · <b>fp16 + GradScaler</b> on T4/L4.</li>
+            <li><b>Resumable</b> best + last checkpoints — a Colab disconnect costs one epoch.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>Reproducible by construction</h4>
+          <ul class="clean" style="gap:12px">
+            <li>Full seeding · deterministic cuDNN · seeded dataloaders.</li>
+            <li><b>Offline</b> pretrained weights, pinned versions.</li>
+            <li>A <b>verification cell</b> recomputes every EDA stat from disk and <b>fails loudly</b> on any mismatch.</li>
+            <li><span class="mono">SMOKE_TEST</span> exercises the whole path in minutes.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 13 INFERENCE / CALIBRATION -->
+    <section class="slide" data-section="Inference">
+      <div class="eyebrow rv"><span class="tick"></span> <b>12</b> · Calibration &amp; inference</div>
+      <h2 class="headline rv">Ensemble, calibrate, clip.</h2>
+      <div class="slide-body two-col rv2" style="align-items:center">
+        <ul class="clean">
+          <li><b>Per-source calibration</b> fit on OOF only, cross-validated across identity / shift / affine — kept <i>only</i> if it beats identity by &gt; 1 fold-std.</li>
+          <li><b>5 fold-best checkpoints × TTA</b> — full 8-way dihedral for A, h-flip for B — averaged <b>in kcal space</b>.</li>
+          <li>Per-source clip to <span class="mono">[train_min, p99.5]</span>; exact-format submission guarded by assertions.</li>
+        </ul>
+        <div class="panel">
+          <h4>Calibration result</h4>
+          <table class="cmp" style="font-size:14.5px">
+            <thead><tr><th>source</th><th>chosen</th><th style="text-align:right">beats id?</th></tr></thead>
+            <tbody>
+              <tr><td class="cA">A</td><td class="mono">identity</td><td style="text-align:right;color:var(--muted)">no</td></tr>
+              <tr><td class="cB">B</td><td class="mono">identity</td><td style="text-align:right;color:var(--muted)">no</td></tr>
+            </tbody>
+          </table>
+          <div class="callout teal" style="margin-top:16px">The model was already well-calibrated per source, so calibration <b>correctly declined to fit noise</b> — a feature, not a null result.</div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 14 RESULTS + CAVEATS -->
+    <section class="slide" data-section="Results">
+      <div class="eyebrow rv"><span class="tick"></span> <b>13</b> · Results &amp; the honest read</div>
+      <h2 class="headline rv">5.4× under baseline — and where the error lives.</h2>
+      <div class="slide-body rv2" style="flex-direction:column;justify-content:flex-start;gap:2px">
+        <div class="big-nums">
+          <div class="bn"><div class="l">Baseline · per-source median</div><div class="v base">214.6</div><div class="s">the bar</div></div>
+          <div class="bn"><div class="l">Grouped-CV OOF · honest</div><div class="v cv">54.8</div><div class="s">A 30.0 &nbsp;·&nbsp; B 133.7</div></div>
+          <div class="bn"><div class="l">Public leaderboard</div><div class="v pub">39.55</div><div class="s">30% slice · 164 imgs</div></div>
+        </div>
+        <div class="two-col" style="align-items:center;gap:30px">
+          <div>
+            <h4 style="font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Model vs baseline · per source (MAE)</h4>
+            <div class="hbar">
+              <div class="row" style="--i:0"><span class="rlab">A base</span><div class="track"><div class="fill" style="background:var(--line2);width:19%"></div></div><span class="val" style="color:var(--muted)">106.7</span></div>
+              <div class="row" style="--i:1"><span class="rlab">A model</span><div class="track"><div class="fill" style="background:var(--A);width:5.4%"></div></div><span class="val" style="color:var(--A)">30.0</span></div>
+              <div class="row" style="--i:2"><span class="rlab">B base</span><div class="track"><div class="fill" style="background:var(--line2);width:100%"></div></div><span class="val" style="color:var(--muted)">556.8</span></div>
+              <div class="row" style="--i:3"><span class="rlab">B model</span><div class="track"><div class="fill" style="background:var(--B);width:24%"></div></div><span class="val" style="color:var(--B)">133.7</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="callout" style="margin-bottom:12px">Source B is <b>24% of images but 58% of total error</b> — the model is effectively judged on B.</div>
+            <div class="callout warn"><b>Trust the CV, not the LB.</b> Public 39.55 &lt; CV 54.8 because it's a tiny slice — expect private closer to the mid-50s. Possible residual train/test dish overlap could flatter the board.</div>
+          </div>
+        </div>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+    <!-- 15 TAKEAWAYS -->
+    <section class="slide" data-section="Takeaways">
+      <div class="eyebrow rv"><span class="tick"></span> <b>14</b> · What to remember</div>
+      <h2 class="headline rv">Three things carried the result.</h2>
+      <div class="slide-body rv2" style="align-items:center">
+        <div class="grid3">
+          <div class="takeaway"><div class="n">01 · METHOD</div><p><b>EDA-driven.</b> Two sources, a heavy tail, and a portion signal — every architectural choice is an answer to a measured fact, not a default.</p></div>
+          <div class="takeaway"><div class="n">02 · VALIDATION</div><p><b>Leakage-aware CV is the real deliverable.</b> With 95.7% duplicate labels, group-aware folds are what make any number believable.</p></div>
+          <div class="takeaway"><div class="n">03 · OBJECTIVE</div><p><b>Match the loss to the metric.</b> Penalising in kcal space up-weights Source B — where MAE is actually won or lost.</p></div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:6px" class="rv3">
+        <span class="mono" style="font-size:13px;color:var(--faint);letter-spacing:.08em">214.6 baseline → 54.8 grouped-CV → 39.55 public &nbsp;·&nbsp; thank you</span>
+      </div>
+      <div class="sig"><span class="bar"><i class="a"></i><i class="b"></i></span> 76% A · 24% B</div>
+    </section>
+
+  </div>
+</div>
+
+<!-- chrome -->
+<div class="chrome">
+  <span class="section-tag" id="sectionTag">Overview</span>
+  <div class="progress"><div class="fill" id="progressFill"></div></div>
+  <span class="counter" id="counter">01 / 15</span>
+</div>
+<button class="navbtn" id="prev" aria-label="Previous slide">‹</button>
+<button class="navbtn" id="next" aria-label="Next slide">›</button>
+<div class="hint"><kbd>←</kbd> <kbd>→</kbd> navigate · <kbd>F</kbd> fullscreen</div>
+
+<script>
+// ---------- data ----------
+const HIST_RAW = [585,816,561,372,193,154,94,71,57,14,19,21,4,0,6,17,5,8,4,0,0,0,7,0,0,6,11,12,6,8,12,4,4,7,4,4,8,4];
+const HIST_LOG = [87,61,92,111,87,144,115,129,117,167,144,126,172,148,163,147,147,144,110,104,86,89,70,58,54,44,17,24,4,14,14,12,0,7,14,29,20,27];
+const BANDS = {labels:["0–100","100–200","200–300","300–500","500–800","800–1.5k","1.5k+"],
+               A:[563,772,480,437,92,10,1], B:[22,44,81,128,227,111,130]};
+
+function bars(el, arr, color){
+  const max = Math.max(...arr);
+  el.innerHTML = arr.map((v,i)=>`<span class="col" style="height:${Math.max(2,v/max*100)}%;--i:${i};--barcol:${color}"></span>`).join('');
+}
+function drawBands(){
+  const el = document.getElementById('bands'); if(!el) return;
+  const max = Math.max(...BANDS.A, ...BANDS.B);
+  el.innerHTML = BANDS.labels.map((lb,i)=>{
+    const a = Math.max(2, BANDS.A[i]/max*100), b = Math.max(2, BANDS.B[i]/max*100);
+    return `<div class="bandgrp"><div class="bandbars"><i class="a" style="height:${a}%;--i:${i}"></i><i class="b" style="height:${b}%;--i:${i}"></i></div><div class="bandlbl">${lb}</div></div>`;
+  }).join('');
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  bars(document.getElementById('histRaw'), HIST_RAW, 'var(--B)');
+  bars(document.getElementById('histLog'), HIST_LOG, 'var(--good)');
+  drawBands();
+});
+
+// ---------- scaling ----------
+function fit(){
+  const s = Math.min(window.innerWidth/1280, window.innerHeight/720);
+  document.getElementById('stage').style.transform = `scale(${s})`;
+}
+window.addEventListener('resize', fit); fit();
+
+// ---------- navigation ----------
+const slides = Array.from(document.querySelectorAll('.slide'));
+const N = slides.length;
+let cur = 0;
+const fill = document.getElementById('progressFill');
+const counter = document.getElementById('counter');
+const sectionTag = document.getElementById('sectionTag');
+function pad(n){return String(n).padStart(2,'0');}
+function show(n){
+  cur = Math.max(0, Math.min(N-1, n));
+  slides.forEach((s,i)=>s.classList.toggle('active', i===cur));
+  fill.style.width = ((cur+1)/N*100)+'%';
+  counter.textContent = `${pad(cur+1)} / ${pad(N)}`;
+  sectionTag.textContent = slides[cur].dataset.section || '';
+}
+function nextS(){ show(cur+1); } function prevS(){ show(cur-1); }
+document.getElementById('next').onclick = nextS;
+document.getElementById('prev').onclick = prevS;
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){ e.preventDefault(); nextS(); }
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); prevS(); }
+  else if(e.key==='Home'){ show(0); } else if(e.key==='End'){ show(N-1); }
+  else if(e.key==='f'||e.key==='F'){ if(!document.fullscreenElement){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();}else{document.exitFullscreen&&document.exitFullscreen();} }
+});
+// swipe
+let tx=0;
+document.addEventListener('touchstart',e=>tx=e.changedTouches[0].clientX,{passive:true});
+document.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-tx; if(Math.abs(d)>50){d<0?nextS():prevS();}},{passive:true});
+show(0);
+</script>
+</body>
+</html>

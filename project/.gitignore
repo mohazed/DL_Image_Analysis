@@ -1,0 +1,7 @@
+checkpoints/
+local_run/
+__pycache__/
+*.pyc
+model/prepared/
+m2-food-calorie-estimation/
+.claude/settings.local.json

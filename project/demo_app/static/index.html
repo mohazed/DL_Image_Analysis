@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guess the Calories</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Guess the Calories</h1>
+      <p class="subtitle">CalorieNet 5-fold ensemble · letterbox → ImageNet norm → ensemble → clip</p>
+    </header>
+
+    <nav class="tabs">
+      <button id="tab-game" class="tab active" data-view="game">Dataset game</button>
+      <button id="tab-upload" class="tab" data-view="upload">Upload a photo</button>
+    </nav>
+
+    <!-- ============ Dataset game view ============ -->
+    <main id="view-game" class="panel">
+      <div class="photo-area">
+        <div class="photo-frame">
+          <img id="photo" alt="food sample" />
+          <span id="source-tag" class="source-tag"></span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="shuffle-btn" class="btn btn-secondary">Shuffle</button>
+        <button id="guess-btn" class="btn btn-primary">Guess the calories</button>
+      </div>
+
+      <div id="result" class="result hidden">
+        <div class="result-row">
+          <div class="result-card">
+            <span class="result-label">Predicted</span>
+            <span id="predicted-value" class="result-value">-</span>
+          </div>
+          <div class="result-card">
+            <span class="result-label">True</span>
+            <span id="true-value" class="result-value">-</span>
+          </div>
+        </div>
+        <div id="error-badge" class="error-badge">
+          <span id="error-value">-</span>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+    </main>
+
+    <!-- ============ Upload view ============ -->
+    <main id="view-upload" class="panel hidden">
+      <label id="dropzone" class="dropzone" for="file-input">
+        <input id="file-input" type="file" accept="image/*" hidden />
+        <div class="photo-frame upload-frame">
+          <img id="upload-photo" alt="" class="hidden" />
+          <span id="upload-source-tag" class="source-tag hidden"></span>
+          <div id="dropzone-hint" class="dropzone-hint">
+            <span class="dz-plus">+</span>
+            <span>Click or drop a food photo here</span>
+            <span class="dz-sub">PNG → source A · JPG → source B</span>
+          </div>
+        </div>
+      </label>
+
+      <div class="controls upload-controls">
+        <div class="source-select">
+          <label for="source-input">Source</label>
+          <select id="source-input">
+            <option value="auto">Auto (from file type)</option>
+            <option value="A">A (.png)</option>
+            <option value="B">B (.jpg)</option>
+          </select>
+        </div>
+        <button id="predict-btn" class="btn btn-primary" disabled>Predict calories</button>
+      </div>
+
+      <div id="upload-result" class="result hidden">
+        <div class="predicted-big">
+          <span id="upload-predicted" class="predicted-big-value">-</span>
+          <span class="predicted-big-unit">kcal</span>
+        </div>
+        <div class="upload-meta">
+          <span id="upload-clip-note" class="clip-note hidden"></span>
+          <div class="fold-spread">
+            <span class="result-label">Per-fold predictions</span>
+            <div id="fold-bars" class="fold-bars"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="upload-status" class="status"></div>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
